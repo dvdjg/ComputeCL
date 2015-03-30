@@ -84,7 +84,7 @@ inline void box_filter_image(const compute::image2d &input,
 
     // build box filter program
     compute::program program = compute::program::create_with_source(source, context);
-    program.build();
+    program.build("-cl-no-signed-zeros -cl-fast-relaxed-math -cl-mad-enable");
 
     // setup box filter kernel
     compute::kernel kernel(program, "box_filter");
@@ -94,7 +94,7 @@ inline void box_filter_image(const compute::image2d &input,
     kernel.set_arg(3, box_width);
 
     // execute the box filter kernel
-    queue.enqueue_nd_range_kernel(kernel, dim(0, 0), input.size(), dim(1, 1));
+    queue.enqueue_nd_range_kernel(kernel, dim(0, 0), input.size(), dim(0, 0));
 }
 
 // this example shows how to load an image using Qt, apply a simple
@@ -156,7 +156,7 @@ void halfCL()
             half & hLuminance = pImageOut[h*width + w];
             float fStored = hLuminance;
             float fLuminance = sinf(sqrtf((h*h+w*w)/100.f));
-            float fDiff = fStored - fLuminance;
+            float fDiff = fStored - fLuminance - 1.1f;
             fError += fDiff;
         }
     }
@@ -193,7 +193,7 @@ int main()
                 << "  vendor: " << device.vendor() << std::endl
                 << "  profile: " << device.profile() << std::endl
                 << "  version: " << device.version() << std::endl
-                << "  version_number: " << device.version_number() << std::endl
+                << "  get_version: " << device.get_version() << std::endl
                 << "  driver_version: " << device.driver_version() << std::endl
                 << "  address_bits: " << device.address_bits() << std::endl
                 << "  global_memory_size: " << device.global_memory_size()/(1024*1024) << " MiB" << std::endl
