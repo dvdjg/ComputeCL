@@ -108,10 +108,11 @@ void halfCL()
               << "width:" << width << std::endl;
 
     // create compute context
-    compute::device gpu = compute::system::default_device();
+    compute::device gpu = compute::system::find_device_name("Intel(R)", 120);
     compute::context context(gpu);
     compute::command_queue queue(context, gpu);
-    std::cout << "\nHALF\n====\ndevice: " << gpu.name() << std::endl;
+    std::cout << "\nHALF\n====\ndevice: " << gpu.name()
+              << "\nversion: " << gpu.version() << std::endl;
 
     // get the opencl image format for the qimage
     compute::image_format format = compute::image_format(compute::image_format::r, compute::image_format::float16);
