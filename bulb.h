@@ -4,8 +4,6 @@
 #include <vector>
 #include <boost/compute/command_queue.hpp>
 #include <boost/compute/image3d.hpp>
-#include "types.hpp"
-
 
 namespace djg
 {
@@ -38,6 +36,7 @@ public:
     compute::extents<3> size() const { return m_images.front().size(); }
     size_t slices() const { return m_images.size(); }
 
+    static size_t bytes_per_pixel(nchanels nc);
 protected:
     compute::command_queue m_queue;
     compute::context m_context;

@@ -30,7 +30,6 @@ void Bulb::init(compute::command_queue & queue,
     for (size_t i = 0; i < slices; ++i) {
         m_images.push_back(compute::image3d(m_context, width, height, depth, format));
     }
-
 }
 
 void Bulb::reset_slice(size_t slice, compute::float4_ fill,
@@ -55,22 +54,58 @@ void Bulb::read_slice(size_t slice, const compute::wait_list &events, compute::e
     compute::extents<3> origin = image.origin();
     compute::extents<3> size = image.size();
     cl_map_flags flags = compute::command_queue::map_read;
-    void *pRawIn = m_queue.enqueue_map_image(image,
-                                             flags,
-                                             origin,
-                                             size,
-                                             &row_pitch,
-                                             &slice_pitch);
+    //compute::event map_event, *pEvent = event ? &map_event : NULL;
+    char * const pImage = reinterpret_cast<char *>(m_queue.enqueue_map_image(
+                image,
+                flags,
+                origin,
+                size,
+                &row_pitch,
+                &slice_pitch,
+                events,
+                NULL));
 
-    half *pImageIn = static_cast<half*>(pRawIn);
-    for(size_t h = 0; h < height; ++h) {
-        for(size_t w = 0; w < width; ++w) {
-            half & hLuminance = pImageIn[h*width + w];
-            float fLuminance = sinf(sqrtf((h*h+w*w)/100.f));
-            hLuminance = fLuminance;
+//    compute::wait_list unmap_events;
+//    if(pEvent) {
+//        unmap_events.insert(*pEvent);
+//    }
+
+    size_t element_size = image.get_info<size_t>(CL_IMAGE_ELEMENT_SIZE);
+    char * pImage2D = pImage;
+    for(size_t d = origin[2]; d < size[2]; ++d) {
+        char * pImage1D = pImage2D;
+        for(size_t h = origin[1]; h < size[1]; ++h) {
+            char *pRow = pImage1D;
+            for(size_t w = origin[0]; w < size[0]; ++w) {
+                half& element = *reinterpret_cast<half*>(pRow);
+                float fLuminance = element;
+                element = fLuminance;
+                pRow += element_size;
+            }
+            pImage1D += row_pitch;
         }
+        pImage2D += slice_pitch;
     }
-    queue.enqueue_unmap_buffer(input_image, pRawIn);
+    m_queue.enqueue_unmap_buffer(image, pImage, compute::wait_list(), event);
+}
+
+size_t Bulb::bytes_per_pixel(Bulb::nchanels nc)
+{
+    size_t bytes = 0;
+    switch (nc) {
+    case Bulb::R:
+        bytes = 1;
+        break;
+    case Bulb::RG:
+        bytes = 2;
+        break;
+    case Bulb::RGBA:
+        bytes = 4;
+        break;
+    default:
+        break;
+    }
+    return bytes;
 }
 
 }
