@@ -11,9 +11,7 @@
 #include <iostream>
 #include <algorithm>
 
-#define CL_USE_DEPRECATED_OPENCL_2_0_APIS
-#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
-#define CL_USE_DEPRECATED_OPENCL_1_1_APIS
+#define BOOST_COMPUTE_DEBUG_KERNEL_COMPILATION
 
 #include <math.h>
 #include <CL/cl.h>
@@ -115,6 +113,7 @@ void halfCL()
               << "\nversion: " << gpu.version() << std::endl;
 
     // get the opencl image format for the qimage
+    // CL_HALF_FLOAT: CL_RGBA, CL_RG, CL_R
     compute::image_format format = compute::image_format(compute::image_format::r, compute::image_format::float16);
 
     // create input and output images on the gpu
@@ -125,8 +124,11 @@ void halfCL()
     const size_t region[3] = { width, height, 1 };
     size_t row_pitch = 0;
 
+    cl_map_flags write_flags = (gpu.get_version() >= 200) ?
+                compute::command_queue::map_write_invalidate_region :
+                compute::command_queue::map_write;
     void *pRawIn = queue.enqueue_map_image(input_image,
-                                           compute::command_queue::map_write,
+                                           write_flags,
                                            origin,
                                            region,
                                            &row_pitch);

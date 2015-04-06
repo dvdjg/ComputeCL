@@ -52,12 +52,13 @@ win32:{
     }
 }
 
-DEFINES += _SCL_SECURE_NO_WARNINGS
+DEFINES += _SCL_SECURE_NO_WARNINGS CL_USE_DEPRECATED_OPENCL_1_0_APIS CL_USE_DEPRECATED_OPENCL_1_1_APIS CL_USE_DEPRECATED_OPENCL_2_0_APIS
 INCLUDEPATH += "$$WD/../compute/include" "$$WD/../half"
 
 LIBS += -lOpenCL -lhalf$$SUFFIX
 
-SOURCES += main.cpp
+SOURCES += main.cpp \
+    bulb.cpp
 
 include(deployment.pri)
 qtcAddDeployment()
@@ -358,6 +359,8 @@ HEADERS += \
     ../compute/include/boost/compute/user_event.hpp \
     ../compute/include/boost/compute/utility.hpp \
     ../compute/include/boost/compute/version.hpp \
-    ../compute/include/boost/compute/wait_list.hpp
+    ../compute/include/boost/compute/wait_list.hpp \
+    bulb.h \
+    types.hpp
 
 
