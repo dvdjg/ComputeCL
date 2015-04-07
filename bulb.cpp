@@ -1,5 +1,6 @@
 #include "bulb.h"
 #include "half.h"
+#include <boost/compute/user_event.hpp>
 
 namespace djg
 {
@@ -32,17 +33,14 @@ void Bulb::init(compute::command_queue & queue,
     }
 }
 
-void Bulb::reset_slice(size_t slice, compute::float4_ fill,
+void Bulb::fill_slice(size_t slice, compute::float4_ fill,
                        const compute::wait_list &events,
                        compute::event * event)
 {
-    half hfill[4]; //{0.1, 0.01, 0.001, 0.0001};
-    hfill[0] = fill[0];
-    hfill[1] = fill[1];
-    hfill[2] = fill[2];
-    hfill[3] = fill[3];
+    //half hfill[4] {fill[0], fill[1], fill[2], fill[3]};
+
     compute::image3d image = m_images[slice];
-    m_queue.enqueue_fill_image(image, hfill, image.origin(), image.size(), events, event);
+    m_queue.enqueue_fill_image(image, &fill, image.origin(), image.size(), events, event);
 
 }
 
@@ -51,42 +49,64 @@ void Bulb::read_slice(size_t slice, const compute::wait_list &events, compute::e
     compute::image3d image = m_images[slice];
     size_t row_pitch = 0;
     size_t slice_pitch = 0;
-    compute::extents<3> origin = image.origin();
-    compute::extents<3> size = image.size();
+    const compute::extents<3> origin = image.origin();
+    const compute::extents<3> size = image.size();
     cl_map_flags flags = compute::command_queue::map_read;
-    //compute::event map_event, *pEvent = event ? &map_event : NULL;
-    char * const pImage = reinterpret_cast<char *>(m_queue.enqueue_map_image(
-                image,
-                flags,
-                origin,
-                size,
-                &row_pitch,
-                &slice_pitch,
-                events,
-                NULL));
+    compute::event map_event, *pmap_event = NULL;
+    compute::user_event *puser_event = NULL;
+    compute::wait_list unmap_wait;
+    if (event) {
+        // Async exec
+        compute::user_event user_event(m_context);
+        unmap_wait.insert(user_event);
+        puser_event = &user_event;
+        pmap_event = &map_event;
+    }
 
-//    compute::wait_list unmap_events;
-//    if(pEvent) {
-//        unmap_events.insert(*pEvent);
-//    }
+    char * const pImage = reinterpret_cast<char *>(
+                m_queue.enqueue_map_image(
+                    image,
+                    flags,
+                    origin,
+                    size,
+                    &row_pitch,
+                    &slice_pitch,
+                    events,
+                    pmap_event)
+                );
 
     size_t element_size = image.get_info<size_t>(CL_IMAGE_ELEMENT_SIZE);
-    char * pImage2D = pImage;
-    for(size_t d = origin[2]; d < size[2]; ++d) {
-        char * pImage1D = pImage2D;
-        for(size_t h = origin[1]; h < size[1]; ++h) {
-            char *pRow = pImage1D;
-            for(size_t w = origin[0]; w < size[0]; ++w) {
-                half& element = *reinterpret_cast<half*>(pRow);
-                float fLuminance = element;
-                element = fLuminance;
-                pRow += element_size;
+
+    auto func = [=]()
+    {
+        char * pImage2D = pImage;
+        for(size_t d = origin[2]; d < size[2]; ++d) {
+            char * pImage1D = pImage2D;
+            for(size_t h = origin[1]; h < size[1]; ++h) {
+                char *pRow = pImage1D;
+                for(size_t w = origin[0]; w < size[0]; ++w) {
+                    half& element = *reinterpret_cast<half*>(pRow);
+                    float fLuminance = element;
+                    element = fLuminance;
+                    pRow += element_size;
+                }
+                pImage1D += row_pitch;
             }
-            pImage1D += row_pitch;
+            pImage2D += slice_pitch;
         }
-        pImage2D += slice_pitch;
+        if(puser_event) {
+            puser_event->set_status(compute::event::complete);
+        }
+    };
+
+    if (event) {
+        // Async exec
+        compute::event::execution_status status = pmap_event->get_status();
+        pmap_event->set_callback(func);
+    } else {
+        func();
     }
-    m_queue.enqueue_unmap_buffer(image, pImage, compute::wait_list(), event);
+    m_queue.enqueue_unmap_buffer(image, pImage, unmap_wait, event);
 }
 
 size_t Bulb::bytes_per_pixel(Bulb::nchanels nc)

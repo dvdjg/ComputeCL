@@ -24,7 +24,7 @@ public:
               size_t slices = 8,
               nchanels nchanel = R);
 
-    void reset_slice(size_t slice = 0,
+    void fill_slice(size_t slice = 0,
                      compute::float4_ fill = compute::float4_(0,0,0,0),
                      const compute::wait_list &events = compute::wait_list(),
                      compute::event * event = NULL);

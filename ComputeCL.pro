@@ -3,6 +3,7 @@ TEMPLATE = app
 CONFIG += console
 CONFIG -= app_bundle
 CONFIG -= qt rtti
+CONFIG += c++11
 
 CONFIG(debug, debug|release):SUFFIX=d
 else:SUFFIX=

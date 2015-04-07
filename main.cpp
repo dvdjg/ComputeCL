@@ -28,6 +28,7 @@
 #include <boost/exception/diagnostic_information.hpp>
 
 #include "half.h"
+#include "bulb.h"
 
 namespace compute = boost::compute;
 
@@ -167,6 +168,21 @@ void halfCL()
     std::cout << "Error = " << fError << std::endl;
 }
 
+void bulb()
+{
+    compute::device gpu = compute::system::find_device_name("Intel(R)", 120);
+    compute::context context(gpu);
+    compute::command_queue queue(context, gpu);
+
+    djg::Bulb bulb;
+
+    bulb.init(queue, 4, 4, 4, 1);
+    bulb.fill_slice(0, compute::float4_(0.5,0.5,0.5,0.5));
+    compute::event event;
+    bulb.read_slice(0, compute::wait_list(), &event);
+
+    event.wait();
+}
 
 int main()
 {
@@ -213,7 +229,8 @@ int main()
     }
 
     try {
-        halfCL();
+        //halfCL();
+        bulb();
     } catch(boost::exception const&  bex) {
         std::cerr << "Boost Exception: " << boost::diagnostic_information(bex);
     } catch(std::exception const&  ex) {
