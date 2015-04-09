@@ -175,9 +175,10 @@ void bulb()
     compute::command_queue queue(context, gpu);
 
     djg::Bulb bulb;
+    //compute::image2d input;
 
-    bulb.init(queue, 4, 4, 4, 1);
-    bulb.fill_slice(0, compute::float4_(0.5,0.5,0.5,0.5));
+    bulb.init(queue, compute::image2d(), 4, 4, 4);
+    bulb.fill_slices(compute::float4_(0.5,0.5,0.5,0.5), compute::float4_(1,1,1,1.001), compute::int2_(0,0));
     compute::event event;
     bulb.read_slice(0, compute::wait_list(), &event);
 
