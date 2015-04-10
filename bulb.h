@@ -36,9 +36,11 @@ public:
     size_t slices() const { return m_memory.size(); }
 
     static size_t bytes_per_pixel(nchanels nc);
-    void execute_kernel_1(size_t slice = 0,
+    void execute_kernel_1(size_t slice,
                           const compute::wait_list &events = compute::wait_list(),
                           compute::event * event = NULL);
+    void execute_kernel_1(const compute::wait_list &in_events = compute::wait_list(),
+                          compute::wait_list *out_events = NULL);
 protected:
     compute::command_queue m_queue;
     compute::context m_context;

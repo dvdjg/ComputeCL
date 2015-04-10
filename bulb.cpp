@@ -5,6 +5,8 @@
 #include <boost/compute/core.hpp>
 #include <boost/compute/system.hpp>
 #include <boost/compute/utility/source.hpp>
+
+#define BOOST_NO_VARIADIC_TEMPLATES
 #include <boost/compute/utility/dim.hpp>
 
 namespace djg
@@ -131,7 +133,7 @@ void Bulb::read_slice(size_t slice, const compute::wait_list &events, compute::e
 
     if (event) {
         // Async exec
-        compute::event::execution_status status = pmap_event->get_status();
+        //compute::event::execution_status status = pmap_event->get_status();
         pmap_event->set_callback(func);
     } else {
         func();
@@ -174,45 +176,82 @@ void Bulb::make_kernels()
 
     // simple box filter kernel source
     const char source[] = BOOST_COMPUTE_STRINGIZE_SOURCE(
-        __kernel void kernel_1(__read_only image2d_t minput_0,
-                               __read_only image2d_t minput_1,
-                               __read_only image2d_t minput_2,
-                               __read_only image2d_t minput_3,
-                               __read_only image2d_t winput,
-                               __read_only image2d_t oinput,
-                               __write_only image2d_t output)
+        float get_pixel(int2 coord,
+                        __read_only image2d_t mem_input_0,
+                        __read_only image2d_t mem_input_1,
+                        __read_only image2d_t mem_input_2,
+                        __read_only image2d_t mem_input_3,
+                        __read_only image2d_t wei_input,
+                        __read_only image2d_t off_input)
+        {
+            float acc = 0;
+            float value;
+            int2 offsets;
+            const sampler_t sampler = CLK_ADDRESS_NONE | CLK_FILTER_NEAREST;
+
+            int2 c_off = (int2)(coord.x*8, coord.y);
+            float4 weights_0 = read_imagef(wei_input, sampler, (int2)(coord.x*2, coord.y));
+            float4 weights_1 = read_imagef(wei_input, sampler, (int2)(coord.x*2+1, coord.y));
+            offsets = read_imagei(off_input, sampler, c_off).xy;
+            value = read_imagef(mem_input_0, sampler, offsets + coord).r;
+            acc += value * weights_0.x;
+            offsets = read_imagei(off_input, sampler, c_off + (int2)(1, 0)).xy;
+            value = read_imagef(mem_input_1, sampler, offsets + coord).r;
+            acc += value * weights_0.y;
+            offsets = read_imagei(off_input, sampler, c_off + (int2)(2, 0)).xy;
+            value = read_imagef(mem_input_2, sampler, offsets + coord).r;
+            acc += value * weights_0.z;
+            offsets = read_imagei(off_input, sampler, c_off + (int2)(3, 0)).xy;
+            value = read_imagef(mem_input_3, sampler, offsets + coord).r;
+            acc += value * weights_0.w;
+            offsets = read_imagei(off_input, sampler, c_off + (int2)(4, 0)).xy;
+            value = read_imagef(mem_input_0, sampler, offsets + coord).r;
+            acc += value * weights_1.x;
+            offsets = read_imagei(off_input, sampler, c_off + (int2)(5, 0)).xy;
+            value = read_imagef(mem_input_1, sampler, offsets + coord).r;
+            acc += value * weights_1.y;
+            offsets = read_imagei(off_input, sampler, c_off + (int2)(6, 0)).xy;
+            value = read_imagef(mem_input_2, sampler, offsets + coord).r;
+            acc += value * weights_1.z;
+            offsets = read_imagei(off_input, sampler, c_off + (int2)(7, 0)).xy;
+            value = read_imagef(mem_input_3, sampler, offsets + coord).r;
+            acc += value * weights_1.w;
+
+            return acc;
+        }
+
+        __kernel void kernel_1(__read_only image2d_t mem_input_0,
+                               __read_only image2d_t mem_input_1,
+                               __read_only image2d_t mem_input_2,
+                               __read_only image2d_t mem_input_3,
+                               __read_only image2d_t wei_input,
+                               __read_only image2d_t off_input,
+                               __write_only image2d_t mem_output)
         {
             int x = get_global_id(0);
             int y = get_global_id(1);
 
-            float acc = 0;
-            int2 offsets[8];
-            const sampler_t sampler = CLK_ADDRESS_NONE | CLK_FILTER_NEAREST;
-            float4 weights_0 = read_imagef(winput, sampler, (int2)(x*2, y));
-            float4 weights_1 = read_imagef(winput, sampler, (int2)(x*2+1, y));
-            for(int i = 0; i < 8; ++i) {
-                offsets[i] = read_imagei(oinput, sampler, (int2)(x*8+i, y)).xy + (int2)(x, y);
-            }
+            int2 coord_0 = (int2)(x*2+0, y);
+            int2 coord_1 = (int2)(x*2+1, y);
 
-            float4 value;
-            value = read_imagef(minput_0, sampler, offsets[0]);
-            acc += value.r * weights_0.x;
-            value = read_imagef(minput_1, sampler, offsets[1]);
-            acc += value.r * weights_0.y;
-            value = read_imagef(minput_2, sampler, offsets[2]);
-            acc += value.r * weights_0.z;
-            value = read_imagef(minput_3, sampler, offsets[3]);
-            acc += value.r * weights_0.w;
-            value = read_imagef(minput_0, sampler, offsets[4]);
-            acc += value.r * weights_1.x;
-            value = read_imagef(minput_1, sampler, offsets[5]);
-            acc += value.r * weights_1.y;
-            value = read_imagef(minput_2, sampler, offsets[6]);
-            acc += value.r * weights_1.z;
-            value = read_imagef(minput_3, sampler, offsets[7]);
-            acc += value.r * weights_1.w;
+            float acc_0 = get_pixel(coord_0,
+                                    mem_input_0,
+                                    mem_input_1,
+                                    mem_input_2,
+                                    mem_input_3,
+                                    wei_input,
+                                    off_input);
+            float acc_1 = get_pixel(coord_1,
+                                    mem_input_0,
+                                    mem_input_1,
+                                    mem_input_2,
+                                    mem_input_3,
+                                    wei_input,
+                                    off_input);
 
-            write_imagef(output, (int2)(x, y), acc);
+            // Escribir 32 bits
+            write_imagef(mem_output, coord_0, acc_0);
+            write_imagef(mem_output, coord_1, acc_1);
         }
     );
 
@@ -226,17 +265,53 @@ void Bulb::make_kernels()
 
 void Bulb::execute_kernel_1(size_t slice, const compute::wait_list &events, compute::event *event)
 {
-    compute::image2d &minput_0 = m_memory[slice];
-    compute::image2d &winput = m_weights[slice];
-    compute::image2d &oinput = m_offsets[slice];
-    compute::image2d &output = m_memory[slice+1];
+    if (slice == 0) {
+        m_kernel_1.set_arg(0, m_memory[0]);
+        m_kernel_1.set_arg(1, m_memory[0]);
+        m_kernel_1.set_arg(2, m_memory[0]);
+        m_kernel_1.set_arg(3, m_memory[0]);
+    } else if (slice == 1) {
+        m_kernel_1.set_arg(0, m_memory[0]);
+        m_kernel_1.set_arg(1, m_memory[0]);
+        m_kernel_1.set_arg(2, m_memory[1]);
+        m_kernel_1.set_arg(3, m_memory[1]);
+    } else if (slice == 2) {
+        m_kernel_1.set_arg(0, m_memory[0]);
+        m_kernel_1.set_arg(1, m_memory[0]);
+        m_kernel_1.set_arg(2, m_memory[1]);
+        m_kernel_1.set_arg(3, m_memory[2]);
+    } else if (slice < m_memory.size()-1) {
+        m_kernel_1.set_arg(0, m_memory[slice-3]);
+        m_kernel_1.set_arg(1, m_memory[slice-2]);
+        m_kernel_1.set_arg(2, m_memory[slice-1]);
+        m_kernel_1.set_arg(3, m_memory[slice-0]);
+    } else {
+        return;
+    }
 
-    m_kernel_1.set_arg(0, minput_0);
-    m_kernel_1.set_arg(1, winput);
-    m_kernel_1.set_arg(2, oinput);
-    m_kernel_1.set_arg(3, output);
+    m_kernel_1.set_arg(4, m_weights[slice]);
+    m_kernel_1.set_arg(5, m_offsets[slice]);
+    m_kernel_1.set_arg(6, m_memory[slice+1]);
 
-    m_queue.enqueue_nd_range_kernel(m_kernel_1, compute::dim(0, 0), minput_0.size(), compute::dim(0, 0), events, event);
+    compute::extents<2> size = m_memory[0].size();
+    m_queue.enqueue_nd_range_kernel(m_kernel_1, compute::dim(0, 0), compute::dim(size[0]/2, size[1]), compute::dim(0, 0), events, event);
+}
+
+void Bulb::execute_kernel_1(const compute::wait_list &in_events, compute::wait_list *out_events)
+{
+    size_t slice = m_memory.size();
+
+    if (slice--) {
+        while (slice--) {
+            if (out_events) {
+                compute::event event;
+                execute_kernel_1(slice, in_events, &event);
+                out_events->insert(event);
+            } else {
+                execute_kernel_1(slice, in_events);
+            }
+        }
+    }
 }
 
 }

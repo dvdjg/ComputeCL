@@ -178,7 +178,7 @@ void bulb()
     //compute::image2d input;
 
     bulb.init(queue, compute::image2d(), 4, 4, 4);
-    bulb.fill_slices(compute::float4_(0.5,0.5,0.5,0.5), compute::float4_(1,1,1,1.001), compute::int2_(0,0));
+    bulb.fill_slices(compute::float4_(0.5f,0.5f,0.5f,0.5f), compute::float4_(1,1,1,1.001f), compute::int2_(0,0));
     compute::event event;
     bulb.read_slice(0, compute::wait_list(), &event);
 
