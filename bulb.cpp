@@ -8,6 +8,7 @@
 
 #define BOOST_NO_VARIADIC_TEMPLATES
 #include <boost/compute/utility/dim.hpp>
+#include "exception_error.hpp"
 
 namespace djg
 {
@@ -41,7 +42,19 @@ void Bulb::init(compute::command_queue & queue,
     compute::image_format oformat = compute::image_format(compute::image_format::rg,   compute::image_format::signed_int8);
 
     if (input.get()){
-        m_memory.push_back(input);
+        if (input.size() != compute::dim(width, height)) {
+            BOOST_THROW_EXCEPTION(computecl_error("Input image size mismatch."));
+        }
+        compute::image_format iformat = input.get_format();
+        compute::image_format::channel_order input_channel_order = iformat.get_channel_order();
+        if (input_channel_order == compute::image_format::r
+         || input_channel_order == compute::image_format::a
+         || input_channel_order == compute::image_format::luminance
+         || input_channel_order == compute::image_format::intensity){
+            m_memory.push_back(input);
+        } else {
+            BOOST_THROW_EXCEPTION(computecl_error("Only one channel input images allowed."));
+        }
     } else {
         m_memory.push_back(compute::image2d(m_context, width, height, mformat));
     }
@@ -50,14 +63,24 @@ void Bulb::init(compute::command_queue & queue,
         m_weights.push_back(compute::image2d(m_context, width*2, height, wformat)); // 4 channels * 2 = 8 weights [0..1]
         m_offsets.push_back(compute::image2d(m_context, width*8, height, oformat)); // 2 channels * 8 = 8 offsets (x,y)
     }
+
+    make_kernels();
 }
 
-void Bulb::fill_slices(compute::float4_ mem_fill, compute::float4_ wei_fill, compute::int2_ off_fill,
+void Bulb::fill_slices(compute::float4_ mem_fill,
+                       compute::float4_ wei_fill,
+                       compute::int2_ off_fill,
                        const compute::wait_list &events,
                        compute::wait_list *event_list)
 {
     fill_slices_inner(m_memory, &mem_fill, events, event_list);
     fill_slices_inner(m_weights, &wei_fill, events, event_list);
+//    through_image(m_weights[0], [&] (void * pelement, size_t x, size_t y)
+//    {
+//        compute::char4_ & elem = *static_cast<compute::char4_*>(pelement);
+//        compute::float4_ f4(elem[0] / 127.f, elem[1] / 127.f, elem[2] / 127.f, elem[3] / 127.f);
+//        float f = f4[0];
+//    });
     fill_slices_inner(m_offsets, &off_fill, events, event_list);
 }
 
@@ -79,23 +102,34 @@ void Bulb::fill_slices_inner(const std::vector<compute::image2d> &slices,
     }
 }
 
-void Bulb::read_slice(size_t slice, const compute::wait_list &events, compute::event *event)
+void Bulb::through_slice(size_t slice,
+                         std::function<void(void * pelement, size_t x, size_t y)> f,
+                         cl_map_flags flags,
+                         const compute::wait_list &events,
+                         compute::event *event)
 {
     compute::image2d image = m_memory[slice];
+    through_image(image, f, flags, events, event);
+}
+
+void Bulb::through_image(compute::image2d image,
+                      std::function<void(void * pelement, size_t x, size_t y)> f,
+                      cl_map_flags flags,
+                      const compute::wait_list &events,
+                      compute::event *event)
+{
     size_t row_pitch = 0;
     size_t slice_pitch = 0;
     const compute::extents<2> origin = image.origin();
     const compute::extents<2> size = image.size();
-    cl_map_flags flags = compute::command_queue::map_read;
     compute::event map_event, *pmap_event = NULL;
-    compute::user_event *puser_event = NULL;
+    compute::user_event user_event;
     compute::wait_list unmap_wait;
 
     if (event) {
         // Async exec
-        compute::user_event user_event(m_context);
+        user_event = compute::user_event(m_context);
         unmap_wait.insert(user_event);
-        puser_event = &user_event;
         pmap_event = &map_event;
     }
 
@@ -115,19 +149,20 @@ void Bulb::read_slice(size_t slice, const compute::wait_list &events, compute::e
 
     auto func = [=]()
     {
+        // Recorre todos los elementos de la imagen
         char * pImage1D = pImage2D;
         for(size_t h = origin[1]; h < size[1]; ++h) {
             char *pRow = pImage1D;
             for(size_t w = origin[0]; w < size[0]; ++w) {
-                half& element = *reinterpret_cast<half*>(pRow);
-                float fLuminance = element;
-                element = fLuminance;
+//                half& element = *reinterpret_cast<half*>(pRow);
+//                float fLuminance = element;
+                f(pRow, w, h);
                 pRow += element_size;
             }
             pImage1D += row_pitch;
         }
-        if(puser_event) {
-            puser_event->set_status(compute::event::complete);
+        if(event) {
+            user_event.set_status(compute::event::complete);
         }
     };
 
@@ -160,18 +195,9 @@ size_t Bulb::bytes_per_pixel(Bulb::nchanels nc)
     return bytes;
 }
 
-//#include "types.h"
-//__kernel void pack_textures_2D(__global i2 * images, __read_only image2d_t tex0, __read_only image2d_t tex1, __read_only image2d_t tex2)
-//{
-// images[0] = tex0;
-// images[1] = tex1;
-// images[2] = tex2;
-//}
 
 void Bulb::make_kernels()
 {
-    //using compute::dim;
-
     const compute::context &context = m_queue.get_context();
 
     // simple box filter kernel source
@@ -185,7 +211,7 @@ void Bulb::make_kernels()
                         __read_only image2d_t off_input)
         {
             float acc = 0;
-            float value;
+            float value = 0.0;
             int2 offsets;
             const sampler_t sampler = CLK_ADDRESS_NONE | CLK_FILTER_NEAREST;
 
@@ -193,29 +219,38 @@ void Bulb::make_kernels()
             float4 weights_0 = read_imagef(wei_input, sampler, (int2)(coord.x*2, coord.y));
             float4 weights_1 = read_imagef(wei_input, sampler, (int2)(coord.x*2+1, coord.y));
             offsets = read_imagei(off_input, sampler, c_off).xy;
-            value = read_imagef(mem_input_0, sampler, offsets + coord).r;
+            value = read_imagef(mem_input_0, sampler, offsets + coord).x;
             acc += value * weights_0.x;
-            offsets = read_imagei(off_input, sampler, c_off + (int2)(1, 0)).xy;
-            value = read_imagef(mem_input_1, sampler, offsets + coord).r;
+            c_off.x += 1;
+            offsets = read_imagei(off_input, sampler, c_off).xy;
+            value = read_imagef(mem_input_1, sampler, offsets + coord).x;
             acc += value * weights_0.y;
-            offsets = read_imagei(off_input, sampler, c_off + (int2)(2, 0)).xy;
-            value = read_imagef(mem_input_2, sampler, offsets + coord).r;
+            c_off.x += 1;
+            offsets = read_imagei(off_input, sampler, c_off).xy;
+            value = read_imagef(mem_input_2, sampler, offsets + coord).x;
             acc += value * weights_0.z;
-            offsets = read_imagei(off_input, sampler, c_off + (int2)(3, 0)).xy;
-            value = read_imagef(mem_input_3, sampler, offsets + coord).r;
+            c_off.x += 1;
+            offsets = read_imagei(off_input, sampler, c_off).xy;
+            value = read_imagef(mem_input_3, sampler, offsets + coord).x;
             acc += value * weights_0.w;
-            offsets = read_imagei(off_input, sampler, c_off + (int2)(4, 0)).xy;
-            value = read_imagef(mem_input_0, sampler, offsets + coord).r;
+            c_off.x += 1;
+            offsets = read_imagei(off_input, sampler, c_off).xy;
+            value = read_imagef(mem_input_0, sampler, offsets + coord).x;
             acc += value * weights_1.x;
-            offsets = read_imagei(off_input, sampler, c_off + (int2)(5, 0)).xy;
-            value = read_imagef(mem_input_1, sampler, offsets + coord).r;
+            c_off.x += 1;
+            offsets = read_imagei(off_input, sampler, c_off).xy;
+            value = read_imagef(mem_input_1, sampler, offsets + coord).x;
             acc += value * weights_1.y;
-            offsets = read_imagei(off_input, sampler, c_off + (int2)(6, 0)).xy;
-            value = read_imagef(mem_input_2, sampler, offsets + coord).r;
+            c_off.x += 1;
+            offsets = read_imagei(off_input, sampler, c_off).xy;
+            value = read_imagef(mem_input_2, sampler, offsets + coord).x;
             acc += value * weights_1.z;
-            offsets = read_imagei(off_input, sampler, c_off + (int2)(7, 0)).xy;
-            value = read_imagef(mem_input_3, sampler, offsets + coord).r;
+            c_off.x += 1;
+            offsets = read_imagei(off_input, sampler, c_off).xy;
+            value = read_imagef(mem_input_3, sampler, offsets + coord).x;
             acc += value * weights_1.w;
+            printf("coord[%d,%d] acc = %f, value = %f, weight0x = %f, weight1w = %f\n\n",
+                    coord.x, coord.y, acc, value, weights_0.x, weights_1.w);
 
             return acc;
         }
@@ -301,6 +336,7 @@ void Bulb::execute_kernel_1(const compute::wait_list &in_events, compute::wait_l
 {
     size_t slice = m_memory.size();
 
+    // Execute all slices
     if (slice--) {
         while (slice--) {
             if (out_events) {

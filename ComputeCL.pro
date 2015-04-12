@@ -34,6 +34,7 @@ LIBS += "-L$$LIBDIR"
 
 WD=$$PWD
 win32:{
+    DEFINES += _CRT_SECURE_NO_WARNINGS
     INCLUDEPATH += "C:/Program Files (x86)/AMD APP SDK/2.9-1/include" "C:\Program Files (x86)\AMD APP SDK\3.0-0-Beta\include"
     INCLUDEPATH += C:/Programa/boost_1_57_0 "$$WD/../boost_1_57_0"
     LIBS += "-LC:/Programa/boost_1_57_0/stage/lib" "-L$$WD/../boost_1_57_0/stage/lib"
@@ -53,7 +54,7 @@ win32:{
     }
 }
 
-DEFINES += _SCL_SECURE_NO_WARNINGS CL_USE_DEPRECATED_OPENCL_1_0_APIS CL_USE_DEPRECATED_OPENCL_1_1_APIS CL_USE_DEPRECATED_OPENCL_2_0_APIS
+DEFINES += _SCL_SECURE_NO_WARNINGS CL_USE_DEPRECATED_OPENCL_1_0_APIS CL_USE_DEPRECATED_OPENCL_1_1_APIS CL_USE_DEPRECATED_OPENCL_2_0_APIS BOOST_COMPUTE_DEBUG_KERNEL_COMPILATION
 INCLUDEPATH += "$$WD/../compute/include" "$$WD/../half"
 
 LIBS += -lOpenCL -lhalf$$SUFFIX
@@ -362,6 +363,7 @@ HEADERS += \
     ../compute/include/boost/compute/version.hpp \
     ../compute/include/boost/compute/wait_list.hpp \
     bulb.h \
-    types.hpp
+    types.hpp \
+    exception_error.hpp
 
 

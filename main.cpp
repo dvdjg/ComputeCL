@@ -27,6 +27,20 @@
 #include <boost/compute/image/image_format.hpp>
 #include <boost/exception/diagnostic_information.hpp>
 
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/expressions.hpp>
+#include <boost/log/sinks/text_file_backend.hpp>
+#include <boost/log/utility/setup/file.hpp>
+#include <boost/log/utility/setup/common_attributes.hpp>
+#include <boost/log/sources/severity_logger.hpp>
+#include <boost/log/sources/record_ostream.hpp>
+
+namespace logging = boost::log;
+namespace src = boost::log::sources;
+namespace sinks = boost::log::sinks;
+namespace keywords = boost::log::keywords;
+
 #include "half.h"
 #include "bulb.h"
 
@@ -107,7 +121,7 @@ void halfCL()
               << "width:" << width << std::endl;
 
     // create compute context
-    compute::device gpu = compute::system::find_device_name("Intel(R)", 120);
+    compute::device gpu = compute::system::find_device();
     compute::context context(gpu);
     compute::command_queue queue(context, gpu);
     std::cout << "\nHALF\n====\ndevice: " << gpu.name()
@@ -170,7 +184,7 @@ void halfCL()
 
 void bulb()
 {
-    compute::device gpu = compute::system::find_device_name("Intel(R)", 120);
+    compute::device gpu = compute::system::find_device(std::string(), "AMD");
     compute::context context(gpu);
     compute::command_queue queue(context, gpu);
 
@@ -178,15 +192,33 @@ void bulb()
     //compute::image2d input;
 
     bulb.init(queue, compute::image2d(), 4, 4, 4);
-    bulb.fill_slices(compute::float4_(0.5f,0.5f,0.5f,0.5f), compute::float4_(1,1,1,1.001f), compute::int2_(0,0));
-    compute::event event;
-    bulb.read_slice(0, compute::wait_list(), &event);
 
-    event.wait();
+    bulb.fill_slices(compute::float4_(0.5f,0.5f,0.5f,0.5f), // memory
+                     compute::float4_(1,1,1,0.25f), // weights ( [-1..1])
+                     compute::int2_(0,0)); // offsets
+    bulb.execute_kernel_1();
+/*    bulb.read_slice(0);
+    bulb.read_slice(1);
+    bulb.read_slice(2);
+    bulb.read_slice(3);
+    bulb.read_slice(4)*/;
 }
 
 int main()
 {
+    logging::add_file_log
+    (
+        keywords::file_name = "ComputeCL_%N.log",
+        keywords::rotation_size = 10 * 1024 * 1024,
+        keywords::time_based_rotation = sinks::file::rotation_at_time_point(0, 0, 0),
+        keywords::format = "[%TimeStamp%]: %Message%"
+    );
+
+    logging::core::get()->set_filter
+    (
+        logging::trivial::severity >= logging::trivial::info
+    );
+
     std::vector<compute::platform> platforms = compute::system::platforms();
 
     for(size_t i = 0; i < platforms.size(); i++){
@@ -199,12 +231,14 @@ int main()
             const compute::device &device = devices[j];
 
             std::string type;
-            if(device.type() & compute::device::gpu)
+            if(device.get_type() & compute::device::gpu)
                 type = "GPU Device";
-            else if(device.type() & compute::device::cpu)
+            else if(device.get_type() & compute::device::cpu)
                 type = "CPU Device";
-            else if(device.type() & compute::device::accelerator)
+            else if(device.get_type() & compute::device::accelerator)
                 type = "Accelerator Device";
+            else if(device.get_type() & compute::device::custom)
+                type = "Custom Device";
             else
                 type = "Unknown Device";
 
@@ -233,7 +267,8 @@ int main()
         //halfCL();
         bulb();
     } catch(boost::exception const&  bex) {
-        std::cerr << "Boost Exception: " << boost::diagnostic_information(bex);
+        std::string str = boost::diagnostic_information(bex);
+        std::cerr << "Boost Exception: " << str;
     } catch(std::exception const&  ex) {
         std::cerr << "Std Exception: " << ex.what();
     }

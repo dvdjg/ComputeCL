@@ -4,6 +4,7 @@
 #include <vector>
 #include <boost/compute/command_queue.hpp>
 #include <boost/compute/image3d.hpp>
+#include <functional>
 
 namespace djg
 {
@@ -28,9 +29,11 @@ public:
                      const compute::wait_list &events = compute::wait_list(),
                      compute::wait_list * event_list = NULL);
 
-    void read_slice(size_t slice = 0,
-                    const compute::wait_list &events = compute::wait_list(),
-                    compute::event * event = NULL);
+    void through_slice(size_t slice,
+                       std::function<void(void *, size_t, size_t)> f,
+                       cl_map_flags flags = compute::command_queue::map_read,
+                       const compute::wait_list &events = compute::wait_list(),
+                       compute::event * event = NULL);
 
     compute::extents<2> size() const { return m_memory.front().size(); }
     size_t slices() const { return m_memory.size(); }
@@ -54,6 +57,12 @@ protected:
                            const void *fill_color,
                            const compute::wait_list &events,
                            compute::wait_list *event_list);
+
+    void through_image(compute::image2d image,
+                       std::function<void(void *, size_t, size_t)> f,
+                       cl_map_flags flags = compute::command_queue::map_read,
+                       const compute::wait_list &events = compute::wait_list(),
+                       compute::event * event = NULL);
 };
 }
 
