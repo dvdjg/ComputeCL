@@ -184,7 +184,7 @@ void halfCL()
 
 void bulb()
 {
-    compute::device gpu = compute::system::find_device(std::string(), "AMD");
+    compute::device gpu = compute::system::find_device(std::string());
     compute::context context(gpu);
     compute::command_queue queue(context, gpu);
 
@@ -193,7 +193,7 @@ void bulb()
 
     bulb.init(queue, compute::image2d(), 4, 4, 4);
 
-    bulb.fill_slices(compute::float4_(0.5f,0.5f,0.5f,0.5f), // memory
+    bulb.fill_slices(compute::float4_(1,1,1,1), // memory
                      compute::float4_(1,1,1,0.25f), // weights ( [-1..1])
                      compute::int2_(0,0)); // offsets
     bulb.execute_kernel_1();
@@ -224,7 +224,10 @@ int main()
     for(size_t i = 0; i < platforms.size(); i++){
         const compute::platform &platform = platforms[i];
 
-        std::cout << "Platform '" << platform.name() << "'" << std::endl;
+        std::cout << "Platform '" << platform.name() << "'" << std::endl
+                  << "  Version '" << platform.version() << "'" << std::endl
+                  << "  Vendor '" << platform.vendor() << "'" << std::endl
+                  << "  Profile '" << platform.profile() << "'" << std::endl;
 
         std::vector<compute::device> devices = platform.devices();
         for(size_t j = 0; j < devices.size(); j++){

@@ -51,18 +51,19 @@ void Bulb::init(compute::command_queue & queue,
          || input_channel_order == compute::image_format::a
          || input_channel_order == compute::image_format::luminance
          || input_channel_order == compute::image_format::intensity){
-            m_memory.push_back(input);
+            m_imIn = input;
         } else {
             BOOST_THROW_EXCEPTION(computecl_error("Only one channel input images allowed."));
         }
     } else {
-        m_memory.push_back(compute::image2d(m_context, width, height, mformat));
+        m_imIn = compute::image2d(m_context, width, height, mformat);
     }
     for (size_t i = 0; i < slices; ++i) {
         m_memory.push_back(compute::image2d(m_context, width, height, mformat));
         m_weights.push_back(compute::image2d(m_context, width*2, height, wformat)); // 4 channels * 2 = 8 weights [0..1]
         m_offsets.push_back(compute::image2d(m_context, width*8, height, oformat)); // 2 channels * 8 = 8 offsets (x,y)
     }
+    m_imOut = compute::image2d(m_context, width, height, mformat);
 
     make_kernels();
 }
@@ -102,17 +103,17 @@ void Bulb::fill_slices_inner(const std::vector<compute::image2d> &slices,
     }
 }
 
-void Bulb::through_slice(size_t slice,
+void Bulb::walk_memory_slice(size_t slice,
                          std::function<void(void * pelement, size_t x, size_t y)> f,
                          cl_map_flags flags,
                          const compute::wait_list &events,
                          compute::event *event)
 {
     compute::image2d image = m_memory[slice];
-    through_image(image, f, flags, events, event);
+    walk_image(image, f, flags, events, event);
 }
 
-void Bulb::through_image(compute::image2d image,
+void Bulb::walk_image(compute::image2d image,
                       std::function<void(void * pelement, size_t x, size_t y)> f,
                       cl_map_flags flags,
                       const compute::wait_list &events,
@@ -154,8 +155,6 @@ void Bulb::through_image(compute::image2d image,
         for(size_t h = origin[1]; h < size[1]; ++h) {
             char *pRow = pImage1D;
             for(size_t w = origin[0]; w < size[0]; ++w) {
-//                half& element = *reinterpret_cast<half*>(pRow);
-//                float fLuminance = element;
                 f(pRow, w, h);
                 pRow += element_size;
             }
@@ -168,7 +167,6 @@ void Bulb::through_image(compute::image2d image,
 
     if (event) {
         // Async exec
-        //compute::event::execution_status status = pmap_event->get_status();
         pmap_event->set_callback(func);
     } else {
         func();
@@ -249,8 +247,8 @@ void Bulb::make_kernels()
             offsets = read_imagei(off_input, sampler, c_off).xy;
             value = read_imagef(mem_input_3, sampler, offsets + coord).x;
             acc += value * weights_1.w;
-            printf("coord[%d,%d] acc = %f, value = %f, weight0x = %f, weight1w = %f\n\n",
-                    coord.x, coord.y, acc, value, weights_0.x, weights_1.w);
+//            printf("coord[%d,%d] acc = %f, value = %f, weight0x = %f, weight1w = %f\n\n",
+//                    coord.x, coord.y, acc, value, weights_0.x, weights_1.w);
 
             return acc;
         }
@@ -301,35 +299,40 @@ void Bulb::make_kernels()
 void Bulb::execute_kernel_1(size_t slice, const compute::wait_list &events, compute::event *event)
 {
     if (slice == 0) {
-        m_kernel_1.set_arg(0, m_memory[0]);
-        m_kernel_1.set_arg(1, m_memory[0]);
-        m_kernel_1.set_arg(2, m_memory[0]);
-        m_kernel_1.set_arg(3, m_memory[0]);
+        m_kernel_1.set_arg(0, m_imIn);
+        m_kernel_1.set_arg(1, m_imIn);
+        m_kernel_1.set_arg(2, m_imIn);
+        m_kernel_1.set_arg(3, m_memory[slice]);
     } else if (slice == 1) {
-        m_kernel_1.set_arg(0, m_memory[0]);
-        m_kernel_1.set_arg(1, m_memory[0]);
-        m_kernel_1.set_arg(2, m_memory[1]);
-        m_kernel_1.set_arg(3, m_memory[1]);
+        m_kernel_1.set_arg(0, m_imIn);
+        m_kernel_1.set_arg(1, m_imIn);
+        m_kernel_1.set_arg(2, m_memory[slice-1]);
+        m_kernel_1.set_arg(3, m_memory[slice]);
     } else if (slice == 2) {
-        m_kernel_1.set_arg(0, m_memory[0]);
-        m_kernel_1.set_arg(1, m_memory[0]);
-        m_kernel_1.set_arg(2, m_memory[1]);
-        m_kernel_1.set_arg(3, m_memory[2]);
+        m_kernel_1.set_arg(0, m_imIn);
+        m_kernel_1.set_arg(1, m_memory[slice-2]);
+        m_kernel_1.set_arg(2, m_memory[slice-1]);
+        m_kernel_1.set_arg(3, m_memory[slice]);
     } else if (slice < m_memory.size()-1) {
         m_kernel_1.set_arg(0, m_memory[slice-3]);
         m_kernel_1.set_arg(1, m_memory[slice-2]);
         m_kernel_1.set_arg(2, m_memory[slice-1]);
-        m_kernel_1.set_arg(3, m_memory[slice-0]);
+        m_kernel_1.set_arg(3, m_memory[slice]);
     } else {
         return;
     }
 
     m_kernel_1.set_arg(4, m_weights[slice]);
     m_kernel_1.set_arg(5, m_offsets[slice]);
-    m_kernel_1.set_arg(6, m_memory[slice+1]);
-
+    m_kernel_1.set_arg(6, m_imOut); // Read/Write Output trick.
+    m_imOut.swap(m_memory[slice]);
     compute::extents<2> size = m_memory[0].size();
-    m_queue.enqueue_nd_range_kernel(m_kernel_1, compute::dim(0, 0), compute::dim(size[0]/2, size[1]), compute::dim(0, 0), events, event);
+    m_queue.enqueue_nd_range_kernel(m_kernel_1,
+                                    compute::dim(0, 0),
+                                    compute::dim(size[0]/2,
+                                    size[1]),
+                                    compute::dim(0, 0),
+                                    events, event);
 }
 
 void Bulb::execute_kernel_1(const compute::wait_list &in_events, compute::wait_list *out_events)
@@ -337,15 +340,13 @@ void Bulb::execute_kernel_1(const compute::wait_list &in_events, compute::wait_l
     size_t slice = m_memory.size();
 
     // Execute all slices
-    if (slice--) {
-        while (slice--) {
-            if (out_events) {
-                compute::event event;
-                execute_kernel_1(slice, in_events, &event);
-                out_events->insert(event);
-            } else {
-                execute_kernel_1(slice, in_events);
-            }
+    while (slice--) {
+        if (out_events) {
+            compute::event event;
+            execute_kernel_1(slice, in_events, &event);
+            out_events->insert(event);
+        } else {
+            execute_kernel_1(slice, in_events);
         }
     }
 }
