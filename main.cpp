@@ -254,7 +254,7 @@ int main()
             else
                 type = "Unknown Device";
 
-            std::cout << std::endl
+            std::cout
                 << "  " << type << ": " << device.name() << std::endl
                 << "  vendor: " << device.vendor() << std::endl
                 << "  profile: " << device.profile() << std::endl
@@ -273,6 +273,7 @@ int main()
                 << "  is_subdevice: " << device.is_subdevice() << std::endl
                 << "  extensions: " << device.get_info<std::string>(CL_DEVICE_EXTENSIONS) << std::endl;
         }
+        std::cout << std::endl;
     }
 
     try {
