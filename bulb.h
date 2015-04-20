@@ -32,11 +32,19 @@ public:
     void clear_slices(const compute::wait_list &events = compute::wait_list(),
                       compute::wait_list * event_list = NULL);
 
-    void walk_memory_slice(size_t slice,
-                       std::function<void(void *, size_t, size_t)> f,
-                       cl_map_flags flags = compute::command_queue::map_read,
-                       const compute::wait_list &events = compute::wait_list(),
-                       compute::event * event = NULL);
+//    void walk_memory_slice(size_t slice,
+//                       std::function<void(void *, size_t, size_t)> f,
+//                       cl_map_flags flags = compute::command_queue::map_read,
+//                       const compute::wait_list &events = compute::wait_list(),
+//                       compute::event * event = NULL);
+//    void walk_memory_slice(size_t slice,
+//                       std::function<void(void *pmem, size_t x, size_t y, size_t z)> f,
+//                       cl_map_flags flags = compute::command_queue::map_read,
+//                       const compute::wait_list &events = compute::wait_list(),
+//                       compute::event * event = NULL)
+//    {
+
+//    }
 
     compute::extents<2> size() const { return m_memory.front().size(); }
     size_t slices() const { return m_memory.size(); }
@@ -50,6 +58,16 @@ public:
 
     compute::image2d & input_image() { return m_imIn; }
     const compute::image2d & input_image() const { return m_imIn; }
+
+    std::vector<compute::image2d> & memory_images() { return m_memory; }
+    const std::vector<compute::image2d> & memory_images() const { return m_memory; }
+
+    std::vector<compute::image2d> & weights_images() { return m_weights; }
+    const std::vector<compute::image2d> & weights_images() const { return m_weights; }
+
+    std::vector<compute::image2d> & offsets_images() { return m_offsets; }
+    const std::vector<compute::image2d> & offsets_images() const { return m_offsets; }
+
 
 protected:
     compute::command_queue m_queue;
@@ -72,11 +90,11 @@ protected:
                               const compute::wait_list &events,
                               compute::wait_list *event_list);
 
-    void walk_image(compute::image2d image,
-                       std::function<void(void *, size_t, size_t)> f,
-                       cl_map_flags flags = compute::command_queue::map_read,
-                       const compute::wait_list &events = compute::wait_list(),
-                       compute::event * event = NULL);
+//    void walk_image(compute::image2d image,
+//                       std::function<void(void *, size_t, size_t)> f,
+//                       cl_map_flags flags = compute::command_queue::map_read,
+//                       const compute::wait_list &events = compute::wait_list(),
+//                       compute::event * event = NULL);
 };
 }
 

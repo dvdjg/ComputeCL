@@ -46,6 +46,8 @@ win32:{
     }
     *-g++ {
         LIBS += -llibboost_system-mgw49-mt-1_58
+    } else {
+        # QMAKE_CXXFLAGS += -P
     }
 } else {
     INCLUDEPATH += ~/Programa/compute/include /opt/AMDAPPSDK-3.0-0-Beta/include

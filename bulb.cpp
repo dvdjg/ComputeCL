@@ -10,6 +10,7 @@
 #include <boost/compute/utility/dim.hpp>
 
 #include "exception_error.hpp"
+#include "types.hpp"
 
 namespace djg
 {
@@ -36,7 +37,7 @@ void Bulb::init(compute::command_queue & queue,
     m_context = queue.get_context();
 
     compute::image_format mformat = compute::image_format(compute::image_format::r,    compute::image_format::float16);
-    compute::image_format wformat = compute::image_format(compute::image_format::rgba, compute::image_format::snorm_int8);
+    compute::image_format wformat = compute::image_format(compute::image_format::rgba, compute::image_format::float16);
     compute::image_format oformat = compute::image_format(compute::image_format::rg,   compute::image_format::signed_int8);
 
     if (input.get()){
@@ -82,10 +83,12 @@ void Bulb::fill_slices(compute::float4_ mem_fill,
 void Bulb::clear_slices(const compute::wait_list &events,
                         compute::wait_list *event_list)
 {
-    const static char white[16] = {0};
-    rawfill_slices_inner(m_memory, white, events, event_list);
-    rawfill_slices_inner(m_weights, white, events, event_list);
-    rawfill_slices_inner(m_offsets, white, events, event_list);
+    const compute::half4_ hzero(0,0,0,0);
+    const compute::half4_ hone(1,1,1,1);
+    const compute::char4_ czero(0,0,0,0);
+    rawfill_slices_inner(m_memory, &hzero, events, event_list);
+    rawfill_slices_inner(m_weights, &hone, events, event_list);
+    rawfill_slices_inner(m_offsets, &czero, events, event_list);
 }
 
 #if defined(CL_VERSION_1_2) || defined(BOOST_COMPUTE_DOXYGEN_INVOKED)
@@ -124,7 +127,7 @@ void Bulb::rawfill_slices_inner(const std::vector<compute::image2d> &slices,
         m_queue.enqueue_rawfill_image_walking(image, fill_color, image.origin(), image.size(), events, pevent);
     }
 }
-
+/*
 void Bulb::walk_memory_slice(size_t slice,
                          std::function<void(void * pelement, size_t x, size_t y)> f,
                          cl_map_flags flags,
@@ -195,7 +198,7 @@ void Bulb::walk_image(compute::image2d image,
     }
     m_queue.enqueue_unmap_buffer(image, pImage2D, unmap_wait, event);
 }
-
+*/
 size_t Bulb::bytes_per_pixel(Bulb::nchanels nc)
 {
     size_t bytes = 0;
@@ -362,12 +365,14 @@ void Bulb::execute_kernel_1(const compute::wait_list &in_events, compute::wait_l
     size_t slice = m_memory.size();
 
     // Execute all slices
-    while (slice--) {
-        if (out_events) {
+    if (out_events) {
+        while (slice--) {
             compute::event event;
             execute_kernel_1(slice, in_events, &event);
             out_events->insert(event);
-        } else {
+        }
+    } else {
+        while (slice--) {
             execute_kernel_1(slice, in_events);
         }
     }

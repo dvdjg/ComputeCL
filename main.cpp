@@ -39,7 +39,6 @@ namespace src = boost::log::sources;
 namespace sinks = boost::log::sinks;
 namespace keywords = boost::log::keywords;
 
-#include "half.h"
 #include "bulb.h"
 #include "types.hpp"
 
@@ -186,10 +185,9 @@ void bulb()
     compute::command_queue queue(context, gpu);
 
     djg::Bulb bulb;
-    //compute::image2d input;
 
     bulb.init(queue, compute::image2d(), 4, 4, 4);
-    compute::half4_ hlf4(1,1,1,1);
+    compute::half4_ hlf4(1.f,1.f,1.f,1.f);
 
     queue.enqueue_rawfill_image_walking(bulb.input_image(),
                                         &hlf4,
@@ -200,11 +198,17 @@ void bulb()
 //                     compute::float4_(1,1,1,0.25f), // weights ( [-1..1])
 //                     compute::int2_(0,0)); // offsets
     bulb.execute_kernel_1();
-/*    bulb.read_slice(0);
-    bulb.read_slice(1);
-    bulb.read_slice(2);
-    bulb.read_slice(3);
-    bulb.read_slice(4)*/;
+
+    auto func = [=](void *pmem, size_t x, size_t y, size_t z)
+    {
+        half & h = *(half *)pmem;
+        float f = h;
+        f += 0;
+        (void)x; (void)y; (void)z;
+    };
+
+    queue.enqueue_walk_image(bulb.input_image(), func );
+    queue.enqueue_walk_image(bulb.memory_images()[0], func );
 }
 
 int main()
