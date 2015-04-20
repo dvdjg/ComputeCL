@@ -46,6 +46,7 @@ win32:{
     }
     *-g++ {
         LIBS += -llibboost_system-mgw49-mt-1_58
+        # QMAKE_CXXFLAGS += -save-temps
     } else {
         # QMAKE_CXXFLAGS += -P
     }
