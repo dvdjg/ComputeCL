@@ -2,7 +2,7 @@ TARGET = ComputeCL
 TEMPLATE = app
 CONFIG += console
 CONFIG -= app_bundle
-CONFIG -= qt rtti
+CONFIG -= qt
 CONFIG += c++11
 
 CONFIG(debug, debug|release):SUFFIX=d
@@ -34,26 +34,32 @@ LIBS += "-L$$LIBDIR"
 
 WD=$$PWD
 win32:{
-    INCLUDEPATH += "C:/Program Files (x86)/AMD APP SDK/2.9-1/include" "C:\Program Files (x86)\AMD APP SDK\3.0-0-Beta\include"
-    INCLUDEPATH += C:/Programa/boost_1_57_0 "$$WD/../boost_1_57_0"
-    LIBS += "-LC:/Programa/boost_1_57_0/stage/lib" "-L$$WD/../boost_1_57_0/stage/lib"
+    INCLUDEPATH += "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v7.0/include" "C:/Program Files (x86)/AMD APP SDK/2.9-1/include" "C:/Program Files (x86)/AMD APP SDK/3.0-0-Beta/include"
+    INCLUDEPATH += C:/Programa/boost_1_57_0 "$$WD/../boost_1_57_0" "D:/Boost/include"
+    LIBS += "-LC:/Programa/boost_1_57_0/stage/lib" "-L$$WD/../boost_1_57_0/stage/lib" "-LD:/Boost/lib"
 
     message("arch=$$QMAKE_TARGET.arch")
     win32-*:contains(QMAKE_HOST.arch, x86_64) {
-        LIBS += "-LC:/Program Files (x86)/AMD APP SDK/2.9-1/lib/x86_64" "-LC:/Program Files (x86)/AMD APP SDK/3.0-0-Beta/lib/x86_64"
+        LIBS += "-LC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v7.0/lib/x64" "-LC:/Program Files (x86)/AMD APP SDK/2.9-1/lib/x86_64" "-LC:/Program Files (x86)/AMD APP SDK/3.0-0-Beta/lib/x86_64"
     } else {
-        LIBS += "-LC:/Program Files (x86)/AMD APP SDK/2.9-1/lib/x86" "-LC:/Program Files (x86)/AMD APP SDK/3.0-0-Beta/lib/x86"
+        LIBS += "-LC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v7.0/lib/Win32" "-LC:/Program Files (x86)/AMD APP SDK/2.9-1/lib/x86" "-LC:/Program Files (x86)/AMD APP SDK/3.0-0-Beta/lib/x86"
+    }
+    *-g++ {
+        LIBS += -llibboost_system-mgw49-mt-1_58
     }
 } else {
-    INCLUDEPATH += /home/puesto/Programa/compute/include /opt/AMDAPPSDK-3.0-0-Beta/include
-    LIBS += "-L/opt/AMDAPPSDK-3.0-0-Beta/lib/x86"
+    INCLUDEPATH += ~/Programa/compute/include /opt/AMDAPPSDK-3.0-0-Beta/include
+    LIBS += "-L/opt/AMDAPPSDK-3.0-0-Beta/lib/x86" -lboost_system
 
     linux-*:contains(QMAKE_TARGET.arch, x86_64) {
     } else {
     }
 }
 
-DEFINES += _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS CL_USE_DEPRECATED_OPENCL_1_0_APIS CL_USE_DEPRECATED_OPENCL_1_1_APIS CL_USE_DEPRECATED_OPENCL_2_0_APIS BOOST_COMPUTE_DEBUG_KERNEL_COMPILATION
+DEFINES += _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS \
+            CL_USE_DEPRECATED_OPENCL_1_1_APIS CL_USE_DEPRECATED_OPENCL_2_0_APIS \
+            BOOST_COMPUTE_DEBUG_KERNEL_COMPILATION
+
 INCLUDEPATH += "$$WD/../compute/include" "$$WD/../half"
 
 LIBS += -lOpenCL -lhalf$$SUFFIX
@@ -363,6 +369,7 @@ HEADERS += \
     ../compute/include/boost/compute/wait_list.hpp \
     bulb.h \
     types.hpp \
+    exception_error.hpp \
     exception_error.hpp
 
 

@@ -8,6 +8,7 @@
 
 #define BOOST_NO_VARIADIC_TEMPLATES
 #include <boost/compute/utility/dim.hpp>
+
 #include "exception_error.hpp"
 
 namespace djg
@@ -16,14 +17,11 @@ namespace compute = boost::compute;
 
 Bulb::Bulb()
 {
-
 }
 
 Bulb::~Bulb()
 {
-
 }
-
 
 void Bulb::init(compute::command_queue & queue,
                 compute::image2d input,
@@ -68,6 +66,7 @@ void Bulb::init(compute::command_queue & queue,
     make_kernels();
 }
 
+#if defined(CL_VERSION_1_2) || defined(BOOST_COMPUTE_DOXYGEN_INVOKED)
 void Bulb::fill_slices(compute::float4_ mem_fill,
                        compute::float4_ wei_fill,
                        compute::int2_ off_fill,
@@ -76,15 +75,20 @@ void Bulb::fill_slices(compute::float4_ mem_fill,
 {
     fill_slices_inner(m_memory, &mem_fill, events, event_list);
     fill_slices_inner(m_weights, &wei_fill, events, event_list);
-//    through_image(m_weights[0], [&] (void * pelement, size_t x, size_t y)
-//    {
-//        compute::char4_ & elem = *static_cast<compute::char4_*>(pelement);
-//        compute::float4_ f4(elem[0] / 127.f, elem[1] / 127.f, elem[2] / 127.f, elem[3] / 127.f);
-//        float f = f4[0];
-//    });
     fill_slices_inner(m_offsets, &off_fill, events, event_list);
 }
+#endif
 
+void Bulb::clear_slices(const compute::wait_list &events,
+                        compute::wait_list *event_list)
+{
+    const static char white[16] = {0};
+    rawfill_slices_inner(m_memory, white, events, event_list);
+    rawfill_slices_inner(m_weights, white, events, event_list);
+    rawfill_slices_inner(m_offsets, white, events, event_list);
+}
+
+#if defined(CL_VERSION_1_2) || defined(BOOST_COMPUTE_DOXYGEN_INVOKED)
 void Bulb::fill_slices_inner(const std::vector<compute::image2d> &slices,
                              const void *fill_color,
                              const compute::wait_list &events,
@@ -100,6 +104,24 @@ void Bulb::fill_slices_inner(const std::vector<compute::image2d> &slices,
             event_list->insert(newevent);
         }
         m_queue.enqueue_fill_image(image, fill_color, image.origin(), image.size(), events, pevent);
+    }
+}
+#endif
+void Bulb::rawfill_slices_inner(const std::vector<compute::image2d> &slices,
+                             const void *fill_color,
+                             const compute::wait_list &events,
+                             compute::wait_list *event_list)
+{
+    size_t nslices = slices.size();
+    while (nslices--) {
+        const compute::image2d & image = slices[nslices];
+        compute::event newevent;
+        compute::event* pevent = NULL;
+        if (event_list) {
+            pevent = &newevent;
+            event_list->insert(newevent);
+        }
+        m_queue.enqueue_rawfill_image_walking(image, fill_color, image.origin(), image.size(), events, pevent);
     }
 }
 

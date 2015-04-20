@@ -22,12 +22,15 @@ public:
               size_t width = 256,
               size_t height = 256,
               size_t slices = 8);
-
+#if defined(CL_VERSION_1_2) || defined(BOOST_COMPUTE_DOXYGEN_INVOKED)
     void fill_slices(compute::float4_ mem_fill = compute::float4_(0,0,0,0),
                      compute::float4_ wei_fill = compute::float4_(1,1,1,1),
                      compute::int2_ off_fill = compute::int2_(0,0),
                      const compute::wait_list &events = compute::wait_list(),
                      compute::wait_list * event_list = NULL);
+#endif
+    void clear_slices(const compute::wait_list &events = compute::wait_list(),
+                      compute::wait_list * event_list = NULL);
 
     void walk_memory_slice(size_t slice,
                        std::function<void(void *, size_t, size_t)> f,
@@ -58,10 +61,16 @@ protected:
     std::vector<compute::image2d> m_weights;
     std::vector<compute::image2d> m_offsets;
     void make_kernels();
+#if defined(CL_VERSION_1_2) || defined(BOOST_COMPUTE_DOXYGEN_INVOKED)
     void fill_slices_inner(const std::vector<compute::image2d> &slices,
                            const void *fill_color,
                            const compute::wait_list &events,
                            compute::wait_list *event_list);
+#endif
+    void rawfill_slices_inner(const std::vector<compute::image2d> &slices,
+                              const void *fill_color,
+                              const compute::wait_list &events,
+                              compute::wait_list *event_list);
 
     void walk_image(compute::image2d image,
                        std::function<void(void *, size_t, size_t)> f,

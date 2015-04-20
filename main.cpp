@@ -11,8 +11,6 @@
 #include <iostream>
 #include <algorithm>
 
-#define BOOST_COMPUTE_DEBUG_KERNEL_COMPILATION
-
 #include <math.h>
 #include <CL/cl.h>
 
@@ -36,13 +34,14 @@
 #include <boost/log/sources/severity_logger.hpp>
 #include <boost/log/sources/record_ostream.hpp>
 
-namespace logging = boost::log;
+//namespace logging = boost::log;
 namespace src = boost::log::sources;
 namespace sinks = boost::log::sinks;
 namespace keywords = boost::log::keywords;
 
 #include "half.h"
 #include "bulb.h"
+#include "types.hpp"
 
 namespace compute = boost::compute;
 
@@ -139,9 +138,7 @@ void halfCL()
     const size_t region[3] = { width, height, 1 };
     size_t row_pitch = 0;
 
-    cl_map_flags write_flags = (gpu.get_version() >= 200) ?
-                compute::command_queue::map_write_invalidate_region :
-                compute::command_queue::map_write;
+    cl_map_flags write_flags = compute::command_queue::map_write;
     void *pRawIn = queue.enqueue_map_image(input_image,
                                            write_flags,
                                            origin,
@@ -192,10 +189,16 @@ void bulb()
     //compute::image2d input;
 
     bulb.init(queue, compute::image2d(), 4, 4, 4);
+    compute::half4_ hlf4(1,1,1,1);
 
-    bulb.fill_slices(compute::float4_(1,1,1,1), // memory
-                     compute::float4_(1,1,1,0.25f), // weights ( [-1..1])
-                     compute::int2_(0,0)); // offsets
+    queue.enqueue_rawfill_image_walking(bulb.input_image(),
+                                        &hlf4,
+                                        bulb.input_image().origin(),
+                                        bulb.input_image().size());
+    bulb.clear_slices();
+//    bulb.fill_slices(compute::float4_(1,1,1,1), // memory
+//                     compute::float4_(1,1,1,0.25f), // weights ( [-1..1])
+//                     compute::int2_(0,0)); // offsets
     bulb.execute_kernel_1();
 /*    bulb.read_slice(0);
     bulb.read_slice(1);
@@ -206,18 +209,18 @@ void bulb()
 
 int main()
 {
-    logging::add_file_log
-    (
-        keywords::file_name = "ComputeCL_%N.log",
-        keywords::rotation_size = 10 * 1024 * 1024,
-        keywords::time_based_rotation = sinks::file::rotation_at_time_point(0, 0, 0),
-        keywords::format = "[%TimeStamp%]: %Message%"
-    );
+//    logging::add_file_log
+//    (
+//        keywords::file_name = "ComputeCL_%N.log",
+//        keywords::rotation_size = 10 * 1024 * 1024,
+//        keywords::time_based_rotation = sinks::file::rotation_at_time_point(0, 0, 0),
+//        keywords::format = "[%TimeStamp%]: %Message%"
+//    );
 
-    logging::core::get()->set_filter
-    (
-        logging::trivial::severity >= logging::trivial::info
-    );
+//    logging::core::get()->set_filter
+//    (
+//        logging::trivial::severity >= logging::trivial::info
+//    );
 
     std::vector<compute::platform> platforms = compute::system::platforms();
 
@@ -240,8 +243,10 @@ int main()
                 type = "CPU Device";
             else if(device.get_type() & compute::device::accelerator)
                 type = "Accelerator Device";
+#ifdef CL_DEVICE_TYPE_CUSTOM
             else if(device.get_type() & compute::device::custom)
                 type = "Custom Device";
+#endif
             else
                 type = "Unknown Device";
 
