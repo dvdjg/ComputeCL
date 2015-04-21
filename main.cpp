@@ -178,6 +178,16 @@ void halfCL()
     std::cout << "Error = " << fError << std::endl;
 }
 
+void BOOST_COMPUTE_CL_CALLBACK func(void *pmem, size_t x, size_t y, size_t z)
+{
+    half & h = *(half *)pmem;
+    float f = h;
+    f += 0.0f;
+    h = f;
+    std::cout << "x=" << x << " y=" << y << " :" << f << "\n";
+    (void)x; (void)y; (void)z;
+}
+
 void bulb()
 {
     compute::device gpu = compute::system::find_device(std::string());
@@ -199,34 +209,22 @@ void bulb()
 //                     compute::int2_(0,0)); // offsets
     bulb.execute_kernel_1();
 
-    auto func = [=](void *pmem, size_t x, size_t y, size_t z)
-    {
-        half & h = *(half *)pmem;
-        float f = h;
-        f += 0.0f;
-        h = f;
-        (void)x; (void)y; (void)z;
-    };
+//    auto func = [=](void *pmem, size_t x, size_t y, size_t z)
+//    {
+//        half & h = *(half *)pmem;
+//        float f = h;
+//        f += 0.0f;
+//        h = f;
+//        (void)x; (void)y; (void)z;
+//    };
 
     queue.enqueue_walk_image(bulb.input_image(), func );
+    std::cout << "\n";
     queue.enqueue_walk_image(bulb.memory_images()[0], func );
 }
 
 int main()
 {
-//    logging::add_file_log
-//    (
-//        keywords::file_name = "ComputeCL_%N.log",
-//        keywords::rotation_size = 10 * 1024 * 1024,
-//        keywords::time_based_rotation = sinks::file::rotation_at_time_point(0, 0, 0),
-//        keywords::format = "[%TimeStamp%]: %Message%"
-//    );
-
-//    logging::core::get()->set_filter
-//    (
-//        logging::trivial::severity >= logging::trivial::info
-//    );
-
     std::vector<compute::platform> platforms = compute::system::platforms();
 
     for(size_t i = 0; i < platforms.size(); i++){
