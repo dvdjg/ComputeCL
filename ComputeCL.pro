@@ -45,7 +45,7 @@ win32:{
         LIBS += "-LC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v7.0/lib/Win32" "-LC:/Program Files (x86)/AMD APP SDK/2.9-1/lib/x86" "-LC:/Program Files (x86)/AMD APP SDK/3.0-0-Beta/lib/x86"
     }
     *-g++ {
-        # LIBS += -llibboost_system-mgw49-mt-1_58
+        LIBS += -llibboost_system-mgw49-mt-d-1_58
         # QMAKE_CXXFLAGS += -save-temps
     } else {
         # QMAKE_CXXFLAGS += -P
@@ -59,7 +59,7 @@ win32:{
     }
 }
 
-DEFINES += _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS \
+DEFINES += BOOST_COMPUTE_USE_CPP11 BOOST_COMPUTE_HAVE_THREAD_LOCAL _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS \
             CL_USE_DEPRECATED_OPENCL_1_1_APIS CL_USE_DEPRECATED_OPENCL_2_0_APIS \
             BOOST_COMPUTE_DEBUG_KERNEL_COMPILATION
 
