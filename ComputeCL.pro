@@ -45,7 +45,7 @@ win32:{
         LIBS += "-LC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v7.0/lib/Win32" "-LC:/Program Files (x86)/AMD APP SDK/2.9-1/lib/x86" "-LC:/Program Files (x86)/AMD APP SDK/3.0-0-Beta/lib/x86"
     }
     *-g++ {
-        LIBS += -llibboost_system-mgw49-mt-1_58
+        # LIBS += -llibboost_system-mgw49-mt-1_58
         # QMAKE_CXXFLAGS += -save-temps
     } else {
         # QMAKE_CXXFLAGS += -P

@@ -203,7 +203,8 @@ void bulb()
     {
         half & h = *(half *)pmem;
         float f = h;
-        f += 0;
+        f += 0.0f;
+        h = f;
         (void)x; (void)y; (void)z;
     };
 
