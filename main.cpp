@@ -178,15 +178,18 @@ void halfCL()
     std::cout << "Error = " << fError << std::endl;
 }
 
-void BOOST_COMPUTE_CL_CALLBACK func(void *pmem, size_t x, size_t y, size_t z)
-{
-    half & h = *(half *)pmem;
-    float f = h;
-    f += 0.0f;
-    h = f;
-    std::cout << "x=" << x << " y=" << y << " :" << f << "\n";
-    (void)x; (void)y; (void)z;
-}
+//void BOOST_COMPUTE_CL_CALLBACK func(void *pmem, size_t x, size_t y, size_t z)
+//{
+//    half & h = *(half *)pmem;
+//    float f = h;
+//    f += 0.0f;
+//    h = f;
+//    //std::cout << "x=" << x << " y=" << y << " :" << f << "\n";
+//    if (x == 0)
+//        std::cout << "\n";
+//    std::cout << f << " ";
+//    (void)x; (void)y; (void)z;
+//}
 
 void bulb()
 {
@@ -196,7 +199,8 @@ void bulb()
 
     djg::Bulb bulb;
 
-    bulb.init(queue, compute::image2d(), 4, 4, 4);
+    compute::image2d input(context, 4, 4, djg::Bulb::get_memory_format());
+    bulb.init(queue, 8, 8, 8, input);
     compute::half4_ hlf4(1.f,1.f,1.f,1.f);
 
     queue.enqueue_rawfill_image_walking(bulb.input_image(),
@@ -204,23 +208,27 @@ void bulb()
                                         bulb.input_image().origin(),
                                         bulb.input_image().size());
     bulb.clear_slices();
-//    bulb.fill_slices(compute::float4_(1,1,1,1), // memory
-//                     compute::float4_(1,1,1,0.25f), // weights ( [-1..1])
-//                     compute::int2_(0,0)); // offsets
+
     bulb.execute_kernel_1();
 
-//    auto func = [=](void *pmem, size_t x, size_t y, size_t z)
-//    {
-//        half & h = *(half *)pmem;
-//        float f = h;
-//        f += 0.0f;
-//        h = f;
-//        (void)x; (void)y; (void)z;
-//    };
+    auto func = [=](void *pmem, size_t x, size_t y, size_t z)
+    {
+        half & h = *(half *)pmem;
+        float f = h;
+        f += 0.0f;
+        h = f;
+        //std::cout << "x=" << x << " y=" << y << " :" << f << "\n";
+        if (x == 0)
+            std::cout << "\n";
+        std::cout << f << " ";
+    };
 
+    std::cout << "Input:\n";
     queue.enqueue_walk_image(bulb.input_image(), func );
-    std::cout << "\n";
+    std::cout << "\nMem 0:\n";
     queue.enqueue_walk_image(bulb.memory_images()[0], func );
+    std::cout << "\nMem 1:\n";
+    queue.enqueue_walk_image(bulb.memory_images()[1], func );
 }
 
 int main()

@@ -3,7 +3,7 @@ TEMPLATE = app
 CONFIG += console
 CONFIG -= app_bundle
 CONFIG -= qt
-CONFIG += c++11
+CONFIG += c++11 static
 
 CONFIG(debug, debug|release):SUFFIX=d
 else:SUFFIX=
@@ -45,7 +45,13 @@ win32:{
         LIBS += "-LC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v7.0/lib/Win32" "-LC:/Program Files (x86)/AMD APP SDK/2.9-1/lib/x86" "-LC:/Program Files (x86)/AMD APP SDK/3.0-0-Beta/lib/x86"
     }
     *-g++ {
-        LIBS += -llibboost_system-mgw49-mt-d-1_58
+        static {
+            CONFIG(debug, debug|release):LIBS += -lboost_system-mgw49-mt-d-1_58
+            else:LIBS += -lboost_system-mgw49-mt-1_58
+        } else {
+            CONFIG(debug, debug|release):LIBS += -llibboost_system-mgw49-mt-d-1_58
+            else:LIBS += -llibboost_system-mgw49-mt-1_58
+        }
         # QMAKE_CXXFLAGS += -save-temps
     } else {
         # QMAKE_CXXFLAGS += -P

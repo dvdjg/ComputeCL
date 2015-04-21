@@ -25,10 +25,10 @@ Bulb::~Bulb()
 }
 
 void Bulb::init(compute::command_queue & queue,
-                compute::image2d input,
                 size_t width,
                 size_t height,
-                size_t slices)
+                size_t slices,
+                compute::image2d input)
 {
     if (slices < 4)
         slices = 4;
@@ -36,33 +36,34 @@ void Bulb::init(compute::command_queue & queue,
     m_queue = queue;
     m_context = queue.get_context();
 
-    compute::image_format mformat = compute::image_format(compute::image_format::r,    compute::image_format::float16);
-    compute::image_format wformat = compute::image_format(compute::image_format::rgba, compute::image_format::float16);
-    compute::image_format oformat = compute::image_format(compute::image_format::rg,   compute::image_format::signed_int8);
+    compute::image_format memory_format = get_memory_format();
+    compute::image_format weight_format = compute::image_format(compute::image_format::rgba, compute::image_format::float16);
+    compute::image_format offset_format = compute::image_format(compute::image_format::rg,   compute::image_format::signed_int8);
 
     if (input.get()){
-        if (input.size() != compute::dim(width, height)) {
-            BOOST_THROW_EXCEPTION(computecl_error("Input image size mismatch."));
-        }
+//        if (input.size() != compute::dim(width, height)) {
+//            BOOST_THROW_EXCEPTION(computecl_error("Input image size mismatch."));
+//        }
+        BOOST_ASSERT(input.get_context() == this->get_context());
         compute::image_format iformat = input.get_format();
         compute::image_format::channel_order input_channel_order = iformat.get_channel_order();
         if (input_channel_order == compute::image_format::r
          || input_channel_order == compute::image_format::a
          || input_channel_order == compute::image_format::luminance
          || input_channel_order == compute::image_format::intensity){
-            m_imIn = input;
+            m_imageIn = input;
         } else {
             BOOST_THROW_EXCEPTION(computecl_error("Only one channel input images allowed."));
         }
     } else {
-        m_imIn = compute::image2d(m_context, width, height, mformat);
+        m_imageIn = compute::image2d(m_context, width, height, memory_format);
     }
     for (size_t i = 0; i < slices; ++i) {
-        m_memory.push_back(compute::image2d(m_context, width, height, mformat));
-        m_weights.push_back(compute::image2d(m_context, width*2, height, wformat)); // 4 channels * 2 = 8 weights [0..1]
-        m_offsets.push_back(compute::image2d(m_context, width*8, height, oformat)); // 2 channels * 8 = 8 offsets (x,y)
+        m_memory.push_back(compute::image2d(m_context, width, height, memory_format));
+        m_weight.push_back(compute::image2d(m_context, width*2, height, weight_format)); // 4 channels * 2 = 8 weights [0..1]
+        m_offset.push_back(compute::image2d(m_context, width*8, height, offset_format)); // 2 channels * 8 = 8 offsets (x,y)
     }
-    m_imOut = compute::image2d(m_context, width, height, mformat);
+    m_imageTempOut = compute::image2d(m_context, width, height, memory_format);
 
     make_kernels();
 }
@@ -87,8 +88,8 @@ void Bulb::clear_slices(const compute::wait_list &events,
     const compute::half4_ hone(1,1,1,1);
     const compute::char4_ czero(0,0,0,0);
     rawfill_slices_inner(m_memory, &hzero, events, event_list);
-    rawfill_slices_inner(m_weights, &hone, events, event_list);
-    rawfill_slices_inner(m_offsets, &czero, events, event_list);
+    rawfill_slices_inner(m_weight, &hone, events, event_list);
+    rawfill_slices_inner(m_offset, &czero, events, event_list);
 }
 
 #if defined(CL_VERSION_1_2) || defined(BOOST_COMPUTE_DOXYGEN_INVOKED)
@@ -324,17 +325,17 @@ void Bulb::make_kernels()
 void Bulb::execute_kernel_1(size_t slice, const compute::wait_list &events, compute::event *event)
 {
     if (slice == 0) {
-        m_kernel_1.set_arg(0, m_imIn);
-        m_kernel_1.set_arg(1, m_imIn);
-        m_kernel_1.set_arg(2, m_imIn);
+        m_kernel_1.set_arg(0, m_imageIn);
+        m_kernel_1.set_arg(1, m_imageIn);
+        m_kernel_1.set_arg(2, m_imageIn);
         m_kernel_1.set_arg(3, m_memory[slice]);
     } else if (slice == 1) {
-        m_kernel_1.set_arg(0, m_imIn);
-        m_kernel_1.set_arg(1, m_imIn);
+        m_kernel_1.set_arg(0, m_imageIn);
+        m_kernel_1.set_arg(1, m_imageIn);
         m_kernel_1.set_arg(2, m_memory[slice-1]);
         m_kernel_1.set_arg(3, m_memory[slice]);
     } else if (slice == 2) {
-        m_kernel_1.set_arg(0, m_imIn);
+        m_kernel_1.set_arg(0, m_imageIn);
         m_kernel_1.set_arg(1, m_memory[slice-2]);
         m_kernel_1.set_arg(2, m_memory[slice-1]);
         m_kernel_1.set_arg(3, m_memory[slice]);
@@ -347,10 +348,10 @@ void Bulb::execute_kernel_1(size_t slice, const compute::wait_list &events, comp
         return;
     }
 
-    m_kernel_1.set_arg(4, m_weights[slice]);
-    m_kernel_1.set_arg(5, m_offsets[slice]);
-    m_kernel_1.set_arg(6, m_imOut); // Read/Write Output trick.
-    m_imOut.swap(m_memory[slice]);
+    m_kernel_1.set_arg(4, m_weight[slice]);
+    m_kernel_1.set_arg(5, m_offset[slice]);
+    m_kernel_1.set_arg(6, m_imageTempOut); // Read/Write Output trick.
+    m_imageTempOut.swap(m_memory[slice]);
     compute::extents<2> size = m_memory[0].size();
     m_queue.enqueue_nd_range_kernel(m_kernel_1,
                                     compute::dim(0, 0),
