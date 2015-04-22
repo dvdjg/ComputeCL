@@ -67,6 +67,12 @@ public:
     std::vector<compute::image2d> & weights_images() { return m_weight; }
     const std::vector<compute::image2d> & weights_images() const { return m_weight; }
 
+    std::vector<compute::image2d> & k_images() { return m_k; }
+    const std::vector<compute::image2d> & k_images() const { return m_k; }
+
+    std::vector<compute::image2d> & u_images() { return m_u; }
+    const std::vector<compute::image2d> & u_images() const { return m_u; }
+
     std::vector<compute::image2d> & offsets_images() { return m_offset; }
     const std::vector<compute::image2d> & offsets_images() const { return m_offset; }
 
@@ -83,6 +89,8 @@ protected:
     compute::image2d m_imageIn, m_imageTempOut;
     std::vector<compute::image2d> m_memory;
     std::vector<compute::image2d> m_weight;
+    std::vector<compute::image2d> m_k;
+    std::vector<compute::image2d> m_u;
     std::vector<compute::image2d> m_offset;
 
     void make_kernels();

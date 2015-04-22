@@ -60,7 +60,9 @@ void Bulb::init(compute::command_queue & queue,
     }
     for (size_t i = 0; i < slices; ++i) {
         m_memory.push_back(compute::image2d(m_context, width, height, memory_format));
-        m_weight.push_back(compute::image2d(m_context, width*2, height, weight_format)); // 4 channels * 2 = 8 weights [0..1]
+        m_weight.push_back(compute::image2d(m_context, width*2, height, weight_format)); // 4 channels * 2 = 8 weights
+        m_k.push_back(compute::image2d(m_context, width/4, height, weight_format)); // 4 channels / 4 = 1 k
+        m_u.push_back(compute::image2d(m_context, width/4, height, weight_format)); // 4 channels / 4 = 1 u
         m_offset.push_back(compute::image2d(m_context, width*8, height, offset_format)); // 2 channels * 8 = 8 offsets (x,y)
     }
     m_imageTempOut = compute::image2d(m_context, width, height, memory_format);
@@ -89,6 +91,8 @@ void Bulb::clear_slices(const compute::wait_list &events,
     const compute::char4_ czero(0,0,0,0);
     rawfill_slices_inner(m_memory, &hzero, events, event_list);
     rawfill_slices_inner(m_weight, &hone, events, event_list);
+    rawfill_slices_inner(m_k, &hone, events, event_list);
+    rawfill_slices_inner(m_u, &hone, events, event_list);
     rawfill_slices_inner(m_offset, &czero, events, event_list);
 }
 
@@ -226,6 +230,13 @@ void Bulb::make_kernels()
 
     // simple box filter kernel source
     const char source[] = BOOST_COMPUTE_STRINGIZE_SOURCE(
+        float4 transfer(float4 x, float4 k, float4 u)
+        {
+            float4 denom = (float4)(1,1,1,1) + half_exp(k*(u-x));
+            float4 ret = half_divide(x, denom);
+            return ret;
+        }
+
         float get_pixel(int2 coord,
                         __read_only image2d_t mem_input_0,
                         __read_only image2d_t mem_input_1,
@@ -284,33 +295,60 @@ void Bulb::make_kernels()
                                __read_only image2d_t mem_input_2,
                                __read_only image2d_t mem_input_3,
                                __read_only image2d_t wei_input,
+                               __read_only image2d_t k_input,
+                               __read_only image2d_t u_input,
                                __read_only image2d_t off_input,
                                __write_only image2d_t mem_output)
         {
             int x = get_global_id(0);
             int y = get_global_id(1);
 
-            int2 coord_0 = (int2)(x*2+0, y);
-            int2 coord_1 = (int2)(x*2+1, y);
+            const sampler_t sampler = CLK_ADDRESS_NONE | CLK_FILTER_NEAREST;
 
-            float acc_0 = get_pixel(coord_0,
-                                    mem_input_0,
-                                    mem_input_1,
-                                    mem_input_2,
-                                    mem_input_3,
-                                    wei_input,
-                                    off_input);
-            float acc_1 = get_pixel(coord_1,
-                                    mem_input_0,
-                                    mem_input_1,
-                                    mem_input_2,
-                                    mem_input_3,
-                                    wei_input,
-                                    off_input);
+            int2 coord_0 = (int2)(x*4+0, y);
+            int2 coord_1 = (int2)(x*4+1, y);
+            int2 coord_2 = (int2)(x*4+2, y);
+            int2 coord_3 = (int2)(x*4+3, y);
 
-            // Escribir 32 bits
-            write_imagef(mem_output, coord_0, acc_0);
-            write_imagef(mem_output, coord_1, acc_1);
+            float4 acc = (float4)(
+                get_pixel(coord_0,
+                    mem_input_0,
+                    mem_input_1,
+                    mem_input_2,
+                    mem_input_3,
+                    wei_input,
+                    off_input),
+                get_pixel(coord_1,
+                    mem_input_0,
+                    mem_input_1,
+                    mem_input_2,
+                    mem_input_3,
+                    wei_input,
+                    off_input),
+                get_pixel(coord_2,
+                    mem_input_0,
+                    mem_input_1,
+                    mem_input_2,
+                    mem_input_3,
+                    wei_input,
+                    off_input),
+                get_pixel(coord_3,
+                    mem_input_0,
+                    mem_input_1,
+                    mem_input_2,
+                    mem_input_3,
+                    wei_input,
+                    off_input));
+
+            float4 k = read_imagef(k_input, sampler, coord_0);
+            float4 u = read_imagef(u_input, sampler, coord_0);
+            transfer(acc, k, u)
+
+            // Escribir 64 bits
+            write_imagef(mem_output, coord_0, acc.x);
+            write_imagef(mem_output, coord_1, acc.y);
+            write_imagef(mem_output, coord_2, acc.z);
+            write_imagef(mem_output, coord_3, acc.w);
         }
     );
 
@@ -349,13 +387,15 @@ void Bulb::execute_kernel_1(size_t slice, const compute::wait_list &events, comp
     }
 
     m_kernel_1.set_arg(4, m_weight[slice]);
-    m_kernel_1.set_arg(5, m_offset[slice]);
-    m_kernel_1.set_arg(6, m_imageTempOut); // Read/Write Output trick.
+    m_kernel_1.set_arg(5, m_k[slice]);
+    m_kernel_1.set_arg(6, m_u[slice]);
+    m_kernel_1.set_arg(7, m_offset[slice]);
+    m_kernel_1.set_arg(8, m_imageTempOut); // Read/Write Output trick.
     m_imageTempOut.swap(m_memory[slice]);
     compute::extents<2> size = m_memory[0].size();
     m_queue.enqueue_nd_range_kernel(m_kernel_1,
                                     compute::dim(0, 0),
-                                    compute::dim(size[0]/2,
+                                    compute::dim(size[0]/4,
                                     size[1]),
                                     compute::dim(0, 0),
                                     events, event);
