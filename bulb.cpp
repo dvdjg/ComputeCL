@@ -76,8 +76,8 @@ void Bulb::fill_slices(compute::float4_ mem_fill,
                        compute::wait_list *event_list)
 {
     fill_slices_inner(m_memory, &mem_fill, events, event_list);
-    fill_slices_inner(m_weights, &wei_fill, events, event_list);
-    fill_slices_inner(m_offsets, &off_fill, events, event_list);
+    fill_slices_inner(m_weight, &wei_fill, events, event_list);
+    fill_slices_inner(m_offset, &off_fill, events, event_list);
 }
 #endif
 

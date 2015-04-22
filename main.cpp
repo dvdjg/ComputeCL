@@ -200,7 +200,7 @@ void bulb()
     djg::Bulb bulb;
 
     compute::image2d input(context, 4, 4, djg::Bulb::get_memory_format());
-    bulb.init(queue, 8, 8, 8, input);
+    bulb.init(queue, 4, 4, 8, input);
     compute::half4_ hlf4(1.f,1.f,1.f,1.f);
 
     queue.enqueue_rawfill_image_walking(bulb.input_image(),
@@ -223,12 +223,13 @@ void bulb()
         std::cout << f << " ";
     };
 
-    std::cout << "Input:\n";
+    std::cout << "\nInput:";
     queue.enqueue_walk_image(bulb.input_image(), func );
-    std::cout << "\nMem 0:\n";
+    std::cout << "\n\nMem 0:";
     queue.enqueue_walk_image(bulb.memory_images()[0], func );
-    std::cout << "\nMem 1:\n";
+    std::cout << "\n\nMem 1:";
     queue.enqueue_walk_image(bulb.memory_images()[1], func );
+    std::cout << "\n";
 }
 
 int main()
@@ -255,7 +256,7 @@ int main()
             else if(device.type() & compute::device::accelerator)
                 type = "Accelerator Device";
 #ifdef CL_DEVICE_TYPE_CUSTOM
-            else if(device.get_type() & compute::device::custom)
+            else if(device.type() & compute::device::custom)
                 type = "Custom Device";
 #endif
             else
