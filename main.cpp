@@ -193,7 +193,7 @@ void halfCL()
 
 void bulb()
 {
-    compute::device gpu = compute::system::find_device(std::string());
+    compute::device gpu = compute::system::find_device();
     compute::context context(gpu);
     compute::command_queue queue(context, gpu);
 
@@ -223,6 +223,7 @@ void bulb()
         std::cout << f << " ";
     };
 
+    std::cout << "Device: " << gpu.name() << "\n";
     std::cout << "\nInput:";
     queue.enqueue_walk_image(bulb.input_image(), func );
     std::cout << "\n\nMem 0:";
