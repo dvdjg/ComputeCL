@@ -342,13 +342,13 @@ void Bulb::make_kernels()
 
             float4 k = read_imagef(k_input, sampler, coord_0);
             float4 u = read_imagef(u_input, sampler, coord_0);
-            transfer(acc, k, u)
+            float4 tr = transfer(acc, k, u);
 
             // Escribir 64 bits
-            write_imagef(mem_output, coord_0, acc.x);
-            write_imagef(mem_output, coord_1, acc.y);
-            write_imagef(mem_output, coord_2, acc.z);
-            write_imagef(mem_output, coord_3, acc.w);
+            write_imagef(mem_output, coord_0, tr.x);
+            write_imagef(mem_output, coord_1, tr.y);
+            write_imagef(mem_output, coord_2, tr.z);
+            write_imagef(mem_output, coord_3, tr.w);
         }
     );
 
