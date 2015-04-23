@@ -377,7 +377,7 @@ void Bulb::execute_kernel_1(size_t slice, const compute::wait_list &events, comp
         m_kernel_1.set_arg(1, m_memory[slice-2]);
         m_kernel_1.set_arg(2, m_memory[slice-1]);
         m_kernel_1.set_arg(3, m_memory[slice]);
-    } else if (slice < m_memory.size()-1) {
+    } else if (slice < m_memory.size()) {
         m_kernel_1.set_arg(0, m_memory[slice-3]);
         m_kernel_1.set_arg(1, m_memory[slice-2]);
         m_kernel_1.set_arg(2, m_memory[slice-1]);

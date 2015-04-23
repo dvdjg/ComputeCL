@@ -209,7 +209,8 @@ void bulb()
                                         bulb.input_image().size());
     bulb.clear_slices();
 
-    bulb.execute_kernel_1();
+    compute::wait_list in_events, out_events;
+    bulb.execute_kernel_1(in_events, &out_events);
 
     auto func = [=](void *pmem, size_t x, size_t y, size_t z)
     {
@@ -224,8 +225,8 @@ void bulb()
     };
 
     std::cout << "Device: " << gpu.name() << "\n";
-    std::cout << "\nInput:";
-    queue.enqueue_walk_image(bulb.input_image(), func );
+    std::cout << "\nEvents: " << out_events.size() << "\nInput:";
+    queue.enqueue_walk_image(bulb.input_image(), func, compute::command_queue::map_read, NULL, NULL, out_events );
     std::cout << "\n\nMem 0:";
     queue.enqueue_walk_image(bulb.memory_images()[0], func );
     std::cout << "\n\nMem 1:";
